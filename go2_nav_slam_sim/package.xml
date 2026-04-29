@@ -1,0 +1,27 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>go2_nav_slam_sim</name>
+  <version>0.0.1</version>
+  <description>Go2 simulation package for Nav2 + SLAM Toolbox</description>
+
+  <maintainer email="lorenzo@example.com">lorenzo</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_python</buildtool_depend>
+
+  <depend>launch</depend>
+  <depend>launch_ros</depend>
+  <depend>nav_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>tf2_ros</depend>
+  <depend>ament_index_python</depend>
+
+  <exec_depend>nav2_bringup</exec_depend>
+  <exec_depend>slam_toolbox</exec_depend>
+  <exec_depend>pointcloud_to_laserscan</exec_depend>
+  <exec_depend>rviz2</exec_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

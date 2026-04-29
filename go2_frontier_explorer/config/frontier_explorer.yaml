@@ -1,0 +1,16 @@
+frontier_explorer:
+  ros__parameters:
+    map_topic: /map
+    global_frame: map
+    base_frame: base_link
+    planner_period_sec: 5.0
+    min_frontier_cluster: 10
+    occ_threshold: 50
+    goal_timeout_sec: 90.0
+    goal_min_distance: 2.0
+    goal_max_distance: 25.0
+    goal_offset_from_frontier: 0.8
+    min_goal_clearance: 0.6
+    blacklist_radius: 1.0
+    exploration_stop_ratio: 0.97
+    min_clusters_to_continue: 2
