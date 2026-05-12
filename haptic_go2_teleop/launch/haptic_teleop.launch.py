@@ -24,8 +24,8 @@ def generate_launch_description():
             parameters=[
                 {'cmd_vel_topic': '/teleop_haptic/cmd_vel'},
                 {'body_pose_topic': '/teleop_haptic/body_pose'},
-                {'invert_body_roll': False},
-                {'invert_body_pitch': False},
+                {'invert_body_roll': True},
+                {'invert_body_pitch': True},
             ]
         )
     ])

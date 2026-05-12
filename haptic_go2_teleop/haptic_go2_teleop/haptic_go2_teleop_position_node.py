@@ -58,7 +58,7 @@ class HapticGo2TeleopPositionNode(Node):
 
         # Sign conventions
         self.declare_parameter('invert_linear', False)
-        self.declare_parameter('invert_angular', True)
+        self.declare_parameter('invert_angular', False)
         self.declare_parameter('invert_lateral', True)
         self.declare_parameter('invert_height', False)
         self.declare_parameter('invert_body_roll', False)

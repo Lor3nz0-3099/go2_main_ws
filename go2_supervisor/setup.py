@@ -28,6 +28,8 @@ setup(
             'action_manager = go2_supervisor.action_manager:main',
             'body_pose_mux = go2_supervisor.body_pose_mux:main',
             'nav_request_manager = go2_supervisor.nav_request_manager:main',
+            'body_pose_go2_bridge = go2_supervisor.body_pose_go2_bridge:main',
+            'go2_motion_tester = go2_supervisor.go2_motion_tester:main',
         ],
     },
 )
