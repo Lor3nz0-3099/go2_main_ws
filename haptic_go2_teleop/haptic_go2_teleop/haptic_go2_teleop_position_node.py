@@ -52,38 +52,44 @@ class HapticGo2TeleopPositionNode(Node):
         self.declare_parameter('force_feedback_topic', '/phantom/force_feedback')
 
         # Position mapping axes
+        #
+        # Expected physical mapping:
+        # Phantom Y -> Go2 X forward/backward
+        # Phantom X -> Go2 Y lateral
+        # Phantom Z -> Go2 body height
         self.declare_parameter('linear_axis', 'y')
-        self.declare_parameter('angular_axis', 'x')
+        self.declare_parameter('lateral_axis', 'x')
         self.declare_parameter('height_axis', 'z')
 
         # Sign conventions
         self.declare_parameter('invert_linear', False)
-        self.declare_parameter('invert_angular', False)
         self.declare_parameter('invert_lateral', True)
         self.declare_parameter('invert_height', False)
+
+        self.declare_parameter('invert_yaw', False)
         self.declare_parameter('invert_body_roll', False)
         self.declare_parameter('invert_body_pitch', False)
 
         # Reverse steering correction
-        self.declare_parameter('invert_angular_when_reversing', True)
+        self.declare_parameter('invert_yaw_when_reversing', True)
 
         # Output limits
         self.declare_parameter('max_linear', 0.32)
         self.declare_parameter('max_lateral', 0.15)
-        self.declare_parameter('max_angular', 0.70)
+        self.declare_parameter('max_yaw_rate', 0.70)
 
         # Minimum useful commands once active
         self.declare_parameter('min_linear_active', 0.20)
         self.declare_parameter('min_lateral_active', 0.08)
-        self.declare_parameter('min_angular_active', 0.25)
+        self.declare_parameter('min_yaw_active', 0.25)
 
         # Position processing
         self.declare_parameter('deadzone_distance', 8.0)
         self.declare_parameter('max_distance', 35.0)
 
-        # Roll processing for angular.z
-        self.declare_parameter('deadzone_roll', 0.16)
-        self.declare_parameter('max_roll', 0.55)
+        # Yaw processing for cmd_vel.angular.z
+        self.declare_parameter('deadzone_yaw', 0.16)
+        self.declare_parameter('max_yaw_input', 0.55)
 
         # Height/body processing
         self.declare_parameter('deadzone_height', 5.0)
@@ -117,7 +123,7 @@ class HapticGo2TeleopPositionNode(Node):
         # Rate limiting
         self.declare_parameter('max_linear_accel', 1.20)
         self.declare_parameter('max_lateral_accel', 1.00)
-        self.declare_parameter('max_angular_accel', 2.50)
+        self.declare_parameter('max_yaw_accel', 2.50)
 
         # Haptic spring feedback
         self.declare_parameter('enable_force_feedback', True)
@@ -141,32 +147,34 @@ class HapticGo2TeleopPositionNode(Node):
         self.force_feedback_topic = self.get_parameter('force_feedback_topic').value
 
         self.linear_axis = str(self.get_parameter('linear_axis').value).strip().lower()
-        self.angular_axis = str(self.get_parameter('angular_axis').value).strip().lower()
+        self.lateral_axis = str(self.get_parameter('lateral_axis').value).strip().lower()
         self.height_axis = str(self.get_parameter('height_axis').value).strip().lower()
 
         self.invert_linear = bool(self.get_parameter('invert_linear').value)
-        self.invert_angular = bool(self.get_parameter('invert_angular').value)
         self.invert_lateral = bool(self.get_parameter('invert_lateral').value)
         self.invert_height = bool(self.get_parameter('invert_height').value)
+
+        self.invert_yaw = bool(self.get_parameter('invert_yaw').value)
         self.invert_body_roll = bool(self.get_parameter('invert_body_roll').value)
         self.invert_body_pitch = bool(self.get_parameter('invert_body_pitch').value)
-        self.invert_angular_when_reversing = bool(
-            self.get_parameter('invert_angular_when_reversing').value
+
+        self.invert_yaw_when_reversing = bool(
+            self.get_parameter('invert_yaw_when_reversing').value
         )
 
         self.max_linear = float(self.get_parameter('max_linear').value)
         self.max_lateral = float(self.get_parameter('max_lateral').value)
-        self.max_angular = float(self.get_parameter('max_angular').value)
+        self.max_yaw_rate = float(self.get_parameter('max_yaw_rate').value)
 
         self.min_linear_active = float(self.get_parameter('min_linear_active').value)
         self.min_lateral_active = float(self.get_parameter('min_lateral_active').value)
-        self.min_angular_active = float(self.get_parameter('min_angular_active').value)
+        self.min_yaw_active = float(self.get_parameter('min_yaw_active').value)
 
         self.deadzone_distance = float(self.get_parameter('deadzone_distance').value)
         self.max_distance = float(self.get_parameter('max_distance').value)
 
-        self.deadzone_roll = float(self.get_parameter('deadzone_roll').value)
-        self.max_roll = float(self.get_parameter('max_roll').value)
+        self.deadzone_yaw = float(self.get_parameter('deadzone_yaw').value)
+        self.max_yaw_input = float(self.get_parameter('max_yaw_input').value)
 
         self.deadzone_height = float(self.get_parameter('deadzone_height').value)
         self.max_height_distance = float(self.get_parameter('max_height_distance').value)
@@ -196,7 +204,7 @@ class HapticGo2TeleopPositionNode(Node):
 
         self.max_linear_accel = float(self.get_parameter('max_linear_accel').value)
         self.max_lateral_accel = float(self.get_parameter('max_lateral_accel').value)
-        self.max_angular_accel = float(self.get_parameter('max_angular_accel').value)
+        self.max_yaw_accel = float(self.get_parameter('max_yaw_accel').value)
 
         self.enable_force_feedback = bool(self.get_parameter('enable_force_feedback').value)
         self.spring_k_x = float(self.get_parameter('spring_k_x').value)
@@ -243,7 +251,7 @@ class HapticGo2TeleopPositionNode(Node):
 
         self.filtered_linear = 0.0
         self.filtered_lateral = 0.0
-        self.filtered_angular = 0.0
+        self.filtered_yaw_rate = 0.0
         self.filtered_body_height = 0.0
         self.filtered_body_roll = 0.0
         self.filtered_body_pitch = 0.0
@@ -287,11 +295,18 @@ class HapticGo2TeleopPositionNode(Node):
             f'started | cmd_vel_topic={self.cmd_vel_topic} | body_pose_topic={self.body_pose_topic}',
             LogColors.CYAN
         )
+
         self._log_info(
-            f'Mapping: {self.linear_axis}->vx, {self.angular_axis}->vy, roll->wz, '
-            f'{self.height_axis}->body_z, pitch->body_pitch, yaw->body_roll',
+            f'Mapping: '
+            f'position {self.linear_axis}->vx, '
+            f'position {self.lateral_axis}->vy, '
+            f'position {self.height_axis}->body_z, '
+            f'roll->body_roll, '
+            f'pitch->body_pitch, '
+            f'yaw->wz',
             LogColors.BLUE
         )
+
         self.publish_active(force_log=True)
 
     def _color(self, text: str, color: str) -> str:
@@ -339,6 +354,7 @@ class HapticGo2TeleopPositionNode(Node):
             return self.current_y
         if axis_name == 'z':
             return self.current_z
+
         self._log_warn(f"Invalid axis '{axis_name}', fallback to x.")
         return self.current_x
 
@@ -349,6 +365,8 @@ class HapticGo2TeleopPositionNode(Node):
             return self.ref_y
         if axis_name == 'z':
             return self.ref_z
+
+        self._log_warn(f"Invalid reference axis '{axis_name}', fallback to x.")
         return self.ref_x
 
     def distance_to_command(self, delta: float, min_active: float, max_active: float) -> float:
@@ -366,15 +384,15 @@ class HapticGo2TeleopPositionNode(Node):
         cmd_mag = self.clamp(cmd_mag, 0.0, max_active)
         return sign * cmd_mag
 
-    def roll_to_command(self, delta_roll: float, min_active: float, max_active: float) -> float:
-        sign = 1.0 if delta_roll >= 0.0 else -1.0
-        mag = abs(delta_roll)
+    def yaw_to_command(self, delta_yaw: float, min_active: float, max_active: float) -> float:
+        sign = 1.0 if delta_yaw >= 0.0 else -1.0
+        mag = abs(delta_yaw)
 
-        if mag < self.deadzone_roll:
+        if mag < self.deadzone_yaw:
             return 0.0
 
-        usable_range = max(self.max_roll - self.deadzone_roll, 1e-6)
-        u = (mag - self.deadzone_roll) / usable_range
+        usable_range = max(self.max_yaw_input - self.deadzone_yaw, 1e-6)
+        u = (mag - self.deadzone_yaw) / usable_range
         u = self.clamp(u, 0.0, 1.0)
 
         cmd_mag = min_active + u * (max_active - min_active)
@@ -414,6 +432,7 @@ class HapticGo2TeleopPositionNode(Node):
     def rate_limit(self, target: float, current: float, max_rate: float, dt: float) -> float:
         if dt <= 0.0:
             return target
+
         max_delta = max_rate * dt
         delta = target - current
         delta = self.clamp(delta, -max_delta, max_delta)
@@ -424,6 +443,7 @@ class HapticGo2TeleopPositionNode(Node):
         msg.linear.x = linear_x
         msg.linear.y = linear_y
         msg.linear.z = 0.0
+
         msg.angular.x = 0.0
         msg.angular.y = 0.0
         msg.angular.z = angular_z
@@ -434,6 +454,9 @@ class HapticGo2TeleopPositionNode(Node):
         msg.position.x = 0.0
         msg.position.y = 0.0
         msg.position.z = body_height
+
+        # Body pose uses roll and pitch.
+        # Yaw is kept at zero because yaw is commanded as cmd_vel.angular.z.
         msg.orientation = euler_to_quaternion(body_roll, body_pitch, 0.0)
         return msg
 
@@ -442,6 +465,7 @@ class HapticGo2TeleopPositionNode(Node):
         msg.force.x = fx
         msg.force.y = fy
         msg.force.z = fz
+
         msg.position.x = self.ref_x
         msg.position.y = self.ref_y
         msg.position.z = self.ref_z
@@ -450,15 +474,19 @@ class HapticGo2TeleopPositionNode(Node):
     def is_input_recent(self) -> bool:
         if self.last_state_time is None:
             return False
+
         if not self.enable_timeout:
             return True
+
         return (time.monotonic() - self.last_state_time) <= self.timeout_sec
 
     def is_haptic_active(self) -> bool:
         if not self.reference_initialized:
             return False
+
         if not self.deadman_pressed():
             return False
+
         if not self.is_input_recent():
             return False
 
@@ -466,7 +494,7 @@ class HapticGo2TeleopPositionNode(Node):
         return (
             abs(self.filtered_linear) > motion_eps or
             abs(self.filtered_lateral) > motion_eps or
-            abs(self.filtered_angular) > motion_eps or
+            abs(self.filtered_yaw_rate) > motion_eps or
             abs(self.filtered_body_height) > motion_eps or
             abs(self.filtered_body_roll) > motion_eps or
             abs(self.filtered_body_pitch) > motion_eps
@@ -493,7 +521,7 @@ class HapticGo2TeleopPositionNode(Node):
     def publish_zero(self) -> None:
         self.filtered_linear = 0.0
         self.filtered_lateral = 0.0
-        self.filtered_angular = 0.0
+        self.filtered_yaw_rate = 0.0
         self.filtered_body_height = 0.0
         self.filtered_body_roll = 0.0
         self.filtered_body_pitch = 0.0
@@ -501,6 +529,7 @@ class HapticGo2TeleopPositionNode(Node):
         self.cmd_pub.publish(Twist())
         self.body_pose_pub.publish(self.build_body_pose(0.0, 0.0, 0.0))
         self.force_pub.publish(self.build_force_feedback(0.0, 0.0, 0.0))
+
         self.publish_active()
         self.publish_body_active()
 
@@ -521,24 +550,28 @@ class HapticGo2TeleopPositionNode(Node):
             f'rpy=({self.ref_roll:.3f}, {self.ref_pitch:.3f}, {self.ref_yaw:.3f})',
             LogColors.CYAN
         )
+
         self.publish_active(force_log=True)
         self.publish_body_active()
 
     def deadman_pressed(self) -> bool:
         if not self.enable_deadman:
             return True
+
         if self.deadman_button == 'grey':
             return self.grey_button != 0
+
         if self.deadman_button == 'white':
             return self.white_button != 0
+
         return self.grey_button != 0
 
     def log_debug_throttled(
         self,
         linear_delta: float,
         lateral_delta: float,
-        roll_delta: float,
         height_delta: float,
+        roll_delta: float,
         pitch_delta: float,
         yaw_delta: float,
     ) -> None:
@@ -548,19 +581,20 @@ class HapticGo2TeleopPositionNode(Node):
         now = time.monotonic()
         if now - self.last_debug_log_time < 0.5:
             return
+
         self.last_debug_log_time = now
 
         self._log_info(
             f'[DEBUG] '
             f'd_lin={linear_delta:.3f} '
             f'd_lat={lateral_delta:.3f} '
-            f'd_roll={roll_delta:.3f} '
             f'd_h={height_delta:.3f} '
+            f'd_roll={roll_delta:.3f} '
             f'd_pitch={pitch_delta:.3f} '
             f'd_yaw={yaw_delta:.3f} | '
             f'vx={self.filtered_linear:.3f} '
             f'vy={self.filtered_lateral:.3f} '
-            f'wz={self.filtered_angular:.3f} '
+            f'wz={self.filtered_yaw_rate:.3f} '
             f'body_z={self.filtered_body_height:.3f} '
             f'body_roll={self.filtered_body_roll:.3f} '
             f'body_pitch={self.filtered_body_pitch:.3f}',
@@ -581,6 +615,7 @@ class HapticGo2TeleopPositionNode(Node):
             qy = float(msg.pose.orientation.y)
             qz = float(msg.pose.orientation.z)
             qw = float(msg.pose.orientation.w)
+
             roll, pitch, yaw = self.quaternion_to_euler(qx, qy, qz, qw)
 
             self.current_roll = roll
@@ -601,7 +636,7 @@ class HapticGo2TeleopPositionNode(Node):
             new_white = int(msg.white_button)
 
             if self.recalibrate_with_white_button:
-                white_rising_edge = (self.prev_white_button == 0 and new_white != 0)
+                white_rising_edge = self.prev_white_button == 0 and new_white != 0
                 if white_rising_edge:
                     self.calibrate_reference()
 
@@ -632,10 +667,12 @@ class HapticGo2TeleopPositionNode(Node):
 
     def publish_cmd_callback(self) -> None:
         now = time.monotonic()
+
         if self.last_publish_time is None:
             dt = 1.0 / max(self.publish_rate, 1.0)
         else:
             dt = max(now - self.last_publish_time, 1e-3)
+
         self.last_publish_time = now
 
         if self.last_state_time is None:
@@ -654,76 +691,159 @@ class HapticGo2TeleopPositionNode(Node):
             self.publish_zero()
             return
 
-        linear_delta = self.get_axis_value(self.linear_axis) - self.get_ref_axis_value(self.linear_axis)
-        lateral_delta = self.get_axis_value(self.angular_axis) - self.get_ref_axis_value(self.angular_axis)
-        height_delta = self.get_axis_value(self.height_axis) - self.get_ref_axis_value(self.height_axis)
+        # Position deltas
+        #
+        # Phantom position Y -> Go2 linear.x
+        # Phantom position X -> Go2 linear.y
+        # Phantom position Z -> Go2 body height
+        linear_delta = (
+            self.get_axis_value(self.linear_axis)
+            - self.get_ref_axis_value(self.linear_axis)
+        )
+
+        lateral_delta = (
+            self.get_axis_value(self.lateral_axis)
+            - self.get_ref_axis_value(self.lateral_axis)
+        )
+
+        height_delta = (
+            self.get_axis_value(self.height_axis)
+            - self.get_ref_axis_value(self.height_axis)
+        )
+
+        # Orientation deltas
+        #
+        # Phantom roll  -> Go2 body roll
+        # Phantom pitch -> Go2 body pitch
+        # Phantom yaw   -> Go2 yaw rate / cmd_vel.angular.z
         roll_delta = self.current_roll - self.ref_roll
         pitch_delta = self.current_pitch - self.ref_pitch
         yaw_delta = self.current_yaw - self.ref_yaw
 
         raw_linear_cmd = self.distance_to_command(
-            linear_delta, self.min_linear_active, self.max_linear
+            linear_delta,
+            self.min_linear_active,
+            self.max_linear
         )
+
         raw_lateral_cmd = self.distance_to_command(
-            lateral_delta, self.min_lateral_active, self.max_lateral
+            lateral_delta,
+            self.min_lateral_active,
+            self.max_lateral
         )
-        raw_angular_cmd = self.roll_to_command(
-            roll_delta, self.min_angular_active, self.max_angular
-        )
+
         raw_height_cmd = self.height_to_body_z(height_delta)
 
-        raw_body_pitch = self.body_angle_to_command(
-            pitch_delta, self.max_body_pitch
+        raw_yaw_cmd = self.yaw_to_command(
+            yaw_delta,
+            self.min_yaw_active,
+            self.max_yaw_rate
         )
+
         raw_body_roll = self.body_angle_to_command(
-            yaw_delta, self.max_body_roll
+            roll_delta,
+            self.max_body_roll
+        )
+
+        raw_body_pitch = self.body_angle_to_command(
+            pitch_delta,
+            self.max_body_pitch
         )
 
         cmd_linear = -raw_linear_cmd if self.invert_linear else raw_linear_cmd
-        cmd_angular = -raw_angular_cmd if self.invert_angular else raw_angular_cmd
         cmd_lateral = -raw_lateral_cmd if self.invert_lateral else raw_lateral_cmd
         cmd_height = -raw_height_cmd if self.invert_height else raw_height_cmd
+
+        cmd_yaw = -raw_yaw_cmd if self.invert_yaw else raw_yaw_cmd
         cmd_body_roll = -raw_body_roll if self.invert_body_roll else raw_body_roll
         cmd_body_pitch = -raw_body_pitch if self.invert_body_pitch else raw_body_pitch
 
-        if self.invert_angular_when_reversing and cmd_linear < 0.0:
-            cmd_angular = -cmd_angular
+        if self.invert_yaw_when_reversing and cmd_linear < 0.0:
+            cmd_yaw = -cmd_yaw
 
-        filtered_linear = self.low_pass(cmd_linear, self.filtered_linear, self.filter_alpha)
-        filtered_lateral = self.low_pass(cmd_lateral, self.filtered_lateral, self.filter_alpha)
-        filtered_angular = self.low_pass(cmd_angular, self.filtered_angular, self.filter_alpha)
-        filtered_height = self.low_pass(cmd_height, self.filtered_body_height, self.body_filter_alpha)
-        filtered_body_roll = self.low_pass(
-            cmd_body_roll, self.filtered_body_roll, self.body_angle_filter_alpha
+        filtered_linear = self.low_pass(
+            cmd_linear,
+            self.filtered_linear,
+            self.filter_alpha
         )
+
+        filtered_lateral = self.low_pass(
+            cmd_lateral,
+            self.filtered_lateral,
+            self.filter_alpha
+        )
+
+        filtered_yaw = self.low_pass(
+            cmd_yaw,
+            self.filtered_yaw_rate,
+            self.filter_alpha
+        )
+
+        filtered_height = self.low_pass(
+            cmd_height,
+            self.filtered_body_height,
+            self.body_filter_alpha
+        )
+
+        filtered_body_roll = self.low_pass(
+            cmd_body_roll,
+            self.filtered_body_roll,
+            self.body_angle_filter_alpha
+        )
+
         filtered_body_pitch = self.low_pass(
-            cmd_body_pitch, self.filtered_body_pitch, self.body_angle_filter_alpha
+            cmd_body_pitch,
+            self.filtered_body_pitch,
+            self.body_angle_filter_alpha
         )
 
         self.filtered_linear = self.rate_limit(
-            filtered_linear, self.filtered_linear, self.max_linear_accel, dt
+            filtered_linear,
+            self.filtered_linear,
+            self.max_linear_accel,
+            dt
         )
+
         self.filtered_lateral = self.rate_limit(
-            filtered_lateral, self.filtered_lateral, self.max_lateral_accel, dt
+            filtered_lateral,
+            self.filtered_lateral,
+            self.max_lateral_accel,
+            dt
         )
-        self.filtered_angular = self.rate_limit(
-            filtered_angular, self.filtered_angular, self.max_angular_accel, dt
+
+        self.filtered_yaw_rate = self.rate_limit(
+            filtered_yaw,
+            self.filtered_yaw_rate,
+            self.max_yaw_accel,
+            dt
         )
+
         self.filtered_body_height = self.rate_limit(
-            filtered_height, self.filtered_body_height, self.max_height_rate, dt
+            filtered_height,
+            self.filtered_body_height,
+            self.max_height_rate,
+            dt
         )
+
         self.filtered_body_roll = self.rate_limit(
-            filtered_body_roll, self.filtered_body_roll, self.max_body_roll_rate, dt
+            filtered_body_roll,
+            self.filtered_body_roll,
+            self.max_body_roll_rate,
+            dt
         )
+
         self.filtered_body_pitch = self.rate_limit(
-            filtered_body_pitch, self.filtered_body_pitch, self.max_body_pitch_rate, dt
+            filtered_body_pitch,
+            self.filtered_body_pitch,
+            self.max_body_pitch_rate,
+            dt
         )
 
         self.cmd_pub.publish(
             self.build_twist(
                 self.filtered_linear,
                 self.filtered_lateral,
-                self.filtered_angular
+                self.filtered_yaw_rate
             )
         )
 
@@ -742,8 +862,8 @@ class HapticGo2TeleopPositionNode(Node):
         self.log_debug_throttled(
             linear_delta,
             lateral_delta,
-            roll_delta,
             height_delta,
+            roll_delta,
             pitch_delta,
             yaw_delta,
         )
